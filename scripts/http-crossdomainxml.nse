@@ -27,21 +27,43 @@ References:
 ---
 -- @usage nmap --script http-crossdomainxml <target>
 -- @usage nmap -p80 --script http-crossdomainxml --script-args domain-lookup=true <target>
--- @usage nmap -sV --script http-crossdomainxml 
 -- 
 -- @output
--- 
+-- PORT   STATE SERVICE REASON
+-- 80/tcp open  http    syn-ack ttl 44
+-- | http-crossdomainxml: 
+-- |   VULNERABLE:
+-- |   Cross-domain policy file (crossdomain.xml)
+-- |     State: LIKELY VULNERABLE
+-- |       A cross-domain policy file specifies the permissions that a web client such as Java, Adobe Flash, Adobe Reader, 
+-- |       etc. use to access data across different domains. Overly permissive configurations enables Cross-site Request 
+-- |       Forgery attacks, and may allow third parties to access sensitive data meant for the user.
+-- |     Check results:
+-- |       <?xml version="1.0"?>
+-- |       <cross-domain-policy>
+-- |         <allow-access-from domain="*.site1.com.mx" />
+-- |         <allow-access-from domain="*.site2.com.mx" />
+-- |         <allow-access-from domain="static.site3.com" />
+-- |       </cross-domain-policy>
+-- |     Extra information:
+-- |       Trusted domains:site1.com.mx, site2.com.mx, site3.com
+-- |   
+-- |     References:
+-- |       http://sethsec.blogspot.com/2014/03/exploiting-misconfigured-crossdomainxml.html
+-- |       https://www.adobe.com/devnet/articles/crossdomain_policy_file_spec.html
+-- |       https://www.owasp.org/index.php/Test_RIA_cross_domain_policy_%28OTG-CONFIG-008%29
+-- |       https://www.adobe.com/devnet-docs/acrobatetk/tools/AppSec/CrossDomain_PolicyFile_Specification.pdf
+-- |_      http://gursevkalra.blogspot.com/2013/08/bypassing-same-origin-policy-with-flash.html
 --
---
--- @args http-crossdomainxml.domain-lookup Boolean. Default:false
+-- @args http-crossdomainxml.domain-lookup Boolean to check domain availability. Default:false
 ---
 
 author = {"Seth Arh <sethsec()gmail>", "Paulino Calderon <calderon()websec.mx>"}
 license = "Same as Nmap--See http://nmap.org/book/man-legal.html"
-categories = {"default", "safe", "external", "vuln"}
+categories = {"safe", "external", "vuln"}
 
 portrule = shortport.http
-local supported_tlds_instantdomainsearch = {".com", ".net", ".org", ".co", ".info", ".biz", ".mobi", ".us", ".ca", ".co.uk",
+local tlds_instantdomainsearch = {".com", ".net", ".org", ".co", ".info", ".biz", ".mobi", ".us", ".ca", ".co.uk",
                           ".in", ".io", ".it", ".pt", ".me", ".tv"}
 
 ---
@@ -58,12 +80,8 @@ local supported_tlds_instantdomainsearch = {".com", ".net", ".org", ".co", ".inf
 -- "rank":9.352656364440918,"search":"ngram"}
 ---
 function check_domain (domain)
-  local supported_tlds = {".com", ".net", ".org", ".co", ".info", ".biz", ".mobi", ".us", ".ca", ".co.uk", 
-                          ".in", ".io", ".it", ".pt", ".me", ".tv"}
-
-  --local name, tld = domain:match("(.+)%.(%w+)")
   local name, tld = domain:match("(%w*)%.*(%w*%.%w+)$")
-  if not(stdnse.contains(supported_tlds_instantdomainsearch, tld)) then
+  if not(stdnse.contains(tlds_instantdomainsearch, tld)) then
     stdnse.debug(1, "TLD '%s' is not supported by instantdomainsearch.com. Check manually.", tld)
     return nil
   end
@@ -98,24 +116,28 @@ function check_crossdomain(host, port, lookup)
   local req = http.get(host, port, "/crossdomain.xml", req_opt)
   if req.status and req.status == 200 then
     for line in req.body:gmatch("<allow%-access%-from(.-)%/>") do
-
       line = line:gsub("^%s*(.-)%s*$", "%1")
+      --Matches wildcard, which means vulnerable as any host can comunicate with app
       if line:match("domain%=\"%*\"") then
         stdnse.debug(1, "Wildcard detected!")
         table.insert(trusted_domains, "*")
       else
+        --Parse domains
         line = line:match("domain%=\"(.-)\""):gsub("%*%.", "")
         stdnse.debug(1, "Extracted line: %s", line)
         
         local domain  = line:match("(%w*%.*%w+%.%w+)$")
         if domain ~= nil then
+          --Deals with tlds with double extension
           local tld = domain:match("%w*(%.%w*)%.%w+$") 
-           if tld ~= nil and not(stdnse.contains(supported_tlds_instantdomainsearch, tld)) then
+          if tld ~= nil and not(stdnse.contains(tlds_instantdomainsearch, tld)) then
             domain = domain:match("%w*%.(.*)$")
           end
-         if not(stdnse.contains(trusted_domains, domain)) then
+          --We add domains only once as they can appear multiple times
+          if not(stdnse.contains(trusted_domains, domain)) then
             stdnse.debug(1, "Added trusted domain:%s", domain)
             table.insert(trusted_domains, domain)
+            --Lookup domains if script argument is set
             if ( lookup ) then
               if (check_domain(domain)) then
                 stdnse.debug(1, "Domain '%s' is available for purchase!")
@@ -125,11 +147,9 @@ function check_crossdomain(host, port, lookup)
           
           end
         end
-        stdnse.debug(1, "Extracted domain: %s", domain)
-      
+        stdnse.debug(1, "Extracted domain: %s", domain)     
       end
     end
-
 
     return true, trusted_domains, trusted_domains_available, req.body
   end
