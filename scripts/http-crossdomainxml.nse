@@ -4,7 +4,6 @@ local vulns = require "vulns"
 local nmap = require "nmap"
 local shortport = require "shortport"
 local table = require "table"
-local json = require "json"
 local string = require "string"
 
 description = [[
@@ -30,31 +29,32 @@ References:
 -- 
 -- @output
 -- PORT   STATE SERVICE REASON
--- 80/tcp open  http    syn-ack ttl 44
+-- 80/tcp open  http    syn-ack ttl 40
 -- | http-crossdomainxml: 
 -- |   VULNERABLE:
 -- |   Cross-domain policy file (crossdomain.xml)
--- |     State: LIKELY VULNERABLE
+-- |     State: VULNERABLE (Exploitable)
 -- |       A cross-domain policy file specifies the permissions that a web client such as Java, Adobe Flash, Adobe Reader, 
 -- |       etc. use to access data across different domains. Overly permissive configurations enables Cross-site Request 
 -- |       Forgery attacks, and may allow third parties to access sensitive data meant for the user.
 -- |     Check results:
--- |       <?xml version="1.0"?>
+-- |        <?xml version="1.0"?>
 -- |       <cross-domain-policy>
--- |         <allow-access-from domain="*.site1.com.mx" />
--- |         <allow-access-from domain="*.site2.com.mx" />
--- |         <allow-access-from domain="static.site3.com" />
+-- |       <allow-access-from domain="*.0xdeadbeefcafe2.com" />
+-- |       <allow-access-from domain="*.0xdeadbeefcafe.com" />
 -- |       </cross-domain-policy>
+-- |       
 -- |     Extra information:
--- |       Trusted domains:site1.com.mx, site2.com.mx, site3.com
+-- |       Trusted domains:0xdeadbeefcafe2.com, 0xdeadbeefcafe.com
 -- |   
+-- |   [!]Trusted domains available for purchase:0xdeadbeefcafe2.com
 -- |     References:
--- |       http://sethsec.blogspot.com/2014/03/exploiting-misconfigured-crossdomainxml.html
+-- |       http://gursevkalra.blogspot.com/2013/08/bypassing-same-origin-policy-with-flash.html
 -- |       https://www.adobe.com/devnet/articles/crossdomain_policy_file_spec.html
 -- |       https://www.owasp.org/index.php/Test_RIA_cross_domain_policy_%28OTG-CONFIG-008%29
 -- |       https://www.adobe.com/devnet-docs/acrobatetk/tools/AppSec/CrossDomain_PolicyFile_Specification.pdf
--- |_      http://gursevkalra.blogspot.com/2013/08/bypassing-same-origin-policy-with-flash.html
---
+-- |_      http://sethsec.blogspot.com/2014/03/exploiting-misconfigured-crossdomainxml.html
+-- 
 -- @args http-crossdomainxml.domain-lookup Boolean to check domain availability. Default:false
 ---
 
@@ -92,11 +92,8 @@ function check_domain (domain)
   if ( not(response) or (response.status and response.status ~= 200) ) then 
     return nil 
   end 
-  local status, json_data = json.parse(response.body) 
-  if ( not(status) ) then 
-    return nil
-  end
-  return json_data['isRegistered']
+  local _, _, registered = response.body:find('"isRegistered":(.-),"isBid":')
+  return registered
 end
 
 ---
@@ -139,8 +136,8 @@ function check_crossdomain(host, port, lookup)
             table.insert(trusted_domains, domain)
             --Lookup domains if script argument is set
             if ( lookup ) then
-              if (check_domain(domain)) then
-                stdnse.debug(1, "Domain '%s' is available for purchase!")
+              if check_domain(domain) == "false" then
+                stdnse.debug(1, "Domain '%s' is available for purchase!", domain)
                 table.insert(trusted_domains_available, domain)
               end
             end
