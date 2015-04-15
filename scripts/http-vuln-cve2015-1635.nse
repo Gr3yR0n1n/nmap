@@ -34,8 +34,7 @@ References:
 -- |     Disclosure date: 2015-04-14
 -- |     References:
 -- |       https://technet.microsoft.com/en-us/library/security/ms15-034.aspx
--- |       http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-1635
--- |_      https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-1635
+-- |_      http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-1635
 -- @args http-vuln-cve2015-1635.uri URI to use in request. Default: /
 ---
 
@@ -58,7 +57,6 @@ successfully exploited this vulnerability could execute arbitrary code in the co
     ]],
     IDS = {CVE = 'CVE-2015-1635'},
     references = {
-      'https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-1635',
       'https://technet.microsoft.com/en-us/library/security/ms15-034.aspx'
     },
     dates = {
